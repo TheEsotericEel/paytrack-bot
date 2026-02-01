@@ -5,7 +5,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Telegram Bot Token (get from @BotFather)
-TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '')
+TELEGRAM_BOT_TOKEN = os.getenv('BOT_TOKEN', '')
+if not TELEGRAM_BOT_TOKEN:
+    raise ValueError("BOT_TOKEN environment variable not set. Please set it before running the bot.")
 
 # Stripe API Key (for subscription payments)
 STRIPE_API_KEY = os.getenv('STRIPE_API_KEY', '')
