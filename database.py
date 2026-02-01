@@ -1,11 +1,17 @@
 """Database management for PayTrackBot"""
 import sqlite3
+import os
 from datetime import datetime, date
 from typing import List, Dict, Optional
 import config
 
 def init_db():
     """Initialize database with schema"""
+    # Create data directory if it doesn't exist
+    db_dir = os.path.dirname(config.DB_PATH)
+    if db_dir:
+        os.makedirs(db_dir, exist_ok=True)
+    
     conn = sqlite3.connect(config.DB_PATH)
     cursor = conn.cursor()
     
