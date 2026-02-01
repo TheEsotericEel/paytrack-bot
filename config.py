@@ -1,8 +1,12 @@
 """Configuration for PayTrackBot"""
 import os
-from dotenv import load_dotenv
 
-load_dotenv()
+# Try to load .env file locally, but don't fail if not available (Railway uses env vars)
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 # Telegram Bot Token (get from @BotFather)
 TELEGRAM_BOT_TOKEN = os.getenv('BOT_TOKEN', '')
