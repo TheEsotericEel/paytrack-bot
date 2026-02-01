@@ -1,21 +1,35 @@
 """PayTrackBot - Telegram Invoice Tracker for Freelancers"""
 import logging
+import sys
+import os
 from datetime import datetime, date, timedelta
+
+# Setup logging FIRST
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO,
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler('bot.log')
+    ]
+)
+logger = logging.getLogger(__name__)
+
+logger.info("[START] PayTrackBot initializing...")
+
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application, CommandHandler, MessageHandler, CallbackQueryHandler,
     ConversationHandler, ContextTypes, filters
 )
 
-import config
-import database as db
-
-# Enable logging
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
-logger = logging.getLogger(__name__)
+try:
+    import config
+    import database as db
+    logger.info("[OK] Modules imported")
+except Exception as e:
+    logger.error(f"[ERROR] Import failed: {e}")
+    sys.exit(1)
 
 # Conversation states
 CLIENT_NAME, AMOUNT, DUE_DATE, NOTES = range(4)
@@ -25,29 +39,40 @@ CLIENT_NAME, AMOUNT, DUE_DATE, NOTES = range(4)
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start command - welcome new users"""
     user = update.effective_user
-    db_user = db.get_or_create_user(
-        telegram_id=user.id,
-        username=user.username,
-        first_name=user.first_name
-    )
+    logger.info(f"[CMD] /start from {user.username} (ID: {user.id})")
     
-    welcome_msg = f"""👋 Welcome to **PayTrackBot**, {user.first_name}!
+    try:
+        db_user = db.get_or_create_user(
+            telegram_id=user.id,
+            username=user.username,
+            first_name=user.first_name
+        )
+    except Exception as e:
+        logger.error(f"[ERROR] DB error in start: {e}")
+        await update.message.reply_text("Error initializing user. Please try again.")
+        return
+    
+    welcome_msg = f"""Welcome to PayTrackBot, {user.first_name}!
 
 I help freelancers track invoices and never miss a payment.
 
-**Quick Commands:**
+QUICK COMMANDS:
 /new - Create a new invoice
 /list - View all unpaid invoices
 /stats - See your revenue stats
 /help - Full command list
 
-**Free Plan:** Track up to {config.FREE_TIER_MAX_INVOICES} unpaid invoices
-**Pro Plan ($7/mo):** Unlimited invoices + auto-reminders
+FREE PLAN: Track up to {config.FREE_TIER_MAX_INVOICES} unpaid invoices
+PRO PLAN ($7/mo): Unlimited invoices + auto-reminders
 
 Let's track your first invoice! Use /new to get started.
 """
     
-    await update.message.reply_text(welcome_msg, parse_mode='Markdown')
+    try:
+        await update.message.reply_text(welcome_msg, parse_mode='Markdown')
+        logger.info(f"[OK] Welcome sent to {user.username}")
+    except Exception as e:
+        logger.error(f"[ERROR] Failed to send welcome message: {e}")
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show help message"""
@@ -410,11 +435,27 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def main():
     """Start the bot"""
-    # Initialize database
-    db.init_db()
+    logger.info("[*] Initializing database...")
+    try:
+        db.init_db()
+        logger.info("[OK] Database ready")
+    except Exception as e:
+        logger.error(f"[ERROR] Database init failed: {e}")
+        return
+    
+    if not config.TELEGRAM_BOT_TOKEN:
+        logger.error("[ERROR] BOT_TOKEN not set!")
+        return
+    
+    logger.info(f"[*] Using token: {config.TELEGRAM_BOT_TOKEN[:20]}...")
     
     # Create application
-    app = Application.builder().token(config.TELEGRAM_BOT_TOKEN).build()
+    try:
+        app = Application.builder().token(config.TELEGRAM_BOT_TOKEN).build()
+        logger.info("[OK] Application created")
+    except Exception as e:
+        logger.error(f"[ERROR] Failed to create application: {e}")
+        return
     
     # Conversation handler for creating invoices
     conv_handler = ConversationHandler(
@@ -432,20 +473,33 @@ def main():
     )
     
     # Add handlers
-    app.add_handler(CommandHandler('start', start))
-    app.add_handler(CommandHandler('help', help_command))
-    app.add_handler(CommandHandler('list', list_invoices))
-    app.add_handler(CommandHandler('all', all_invoices))
-    app.add_handler(CommandHandler('stats', stats_command))
-    app.add_handler(CommandHandler('account', account_command))
-    app.add_handler(CommandHandler('upgrade', upgrade_command))
-    app.add_handler(CommandHandler('paid', mark_paid))
-    app.add_handler(CommandHandler('delete', delete_invoice_cmd))
-    app.add_handler(conv_handler)
+    try:
+        app.add_handler(CommandHandler('start', start))
+        app.add_handler(CommandHandler('help', help_command))
+        app.add_handler(CommandHandler('list', list_invoices))
+        app.add_handler(CommandHandler('all', all_invoices))
+        app.add_handler(CommandHandler('stats', stats_command))
+        app.add_handler(CommandHandler('account', account_command))
+        app.add_handler(CommandHandler('upgrade', upgrade_command))
+        app.add_handler(CommandHandler('paid', mark_paid))
+        app.add_handler(CommandHandler('delete', delete_invoice_cmd))
+        app.add_handler(conv_handler)
+        logger.info("[OK] All handlers registered")
+    except Exception as e:
+        logger.error(f"[ERROR] Handler registration failed: {e}")
+        return
     
     # Start bot
-    logger.info("🚀 PayTrackBot started!")
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
+    logger.info("=" * 60)
+    logger.info("[START] PayTrackBot is LIVE and listening for messages")
+    logger.info("=" * 60)
+    
+    try:
+        app.run_polling(allowed_updates=Update.ALL_TYPES)
+    except KeyboardInterrupt:
+        logger.info("[STOP] Bot stopped by user")
+    except Exception as e:
+        logger.error(f"[ERROR] Polling error: {e}")
 
 if __name__ == '__main__':
     main()
